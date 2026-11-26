@@ -46,6 +46,8 @@ Ensure you have the following installed:
    ```
 3. Access AppBuilder in your browser at `http://localhost:8088` (or the `WEB_PORT` you set).
 
+`docker compose up` first runs a one-off `migration` container that sets up the DB schema; the other services start after it finishes.
+
 Service images come from the CruGlobal-AI fork of the stack (`ghcr.io/cruglobal-ai/*`). To use the upstream images instead, set `AB_IMAGE_REGISTRY=docker.io/digiserve` in `.env`.
 
 ### Running Cypress Tests

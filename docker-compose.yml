@@ -23,7 +23,28 @@ services:
       # - mysql_config:/etc/mysql/conf.d
       - mysql_data:/var/lib/mysql
       # - mysql_key:/key
+    # healthy once init scripts are done and the server takes TCP connections
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
   #/db
+
+  #migration: one-off job that applies DB schema patches, then exits.
+  # The other services wait for it to finish. The image is amd64 only for now.
+  migration:
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-migration-manager:${AB_MIGRATION_MANAGER_VERSION:-master}
+    platform: linux/amd64
+    command: ["node", "app.js"]
+    environment:
+      - MYSQL_PASSWORD
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+  #/migration
 
   #nginx setup
   web:
@@ -88,7 +109,10 @@ services:
         target: /var/log/appbuilder/
       - files:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
     # command: [ "node", "--inspect=0.0.0.0:9229", "app.js" ]
   #/api_sails
 
@@ -111,7 +135,10 @@ services:
       - CIRCUITBREAKER_RESET
     hostname: appbuilder
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
     # command: [ "node", "--inspect=0.0.0.0:9229", "app.js" ]
   #/appbuilder
 
@@ -131,7 +158,10 @@ services:
       - CUSTOM_REPORTS_ENABLED
     hostname: custom_reports
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/custom_reports
 
   #definition_manager: (AppBuilder) A service to manage the definitions for a running AppBuilder platform.
@@ -150,7 +180,10 @@ services:
       - DEFINITION_MANAGER_ENABLE
     hostname: definition_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/definition_manager
 
   #file_processor: A service to manage uploaded files.
@@ -176,7 +209,10 @@ services:
       - files:/data
       # - clamav:/var/lib/clamav
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/file_processor
 
   #log_manager: (AppBuilder) A log manager for various AB operations
@@ -199,7 +235,10 @@ services:
       # - SENTRY_CONFIG
     hostname: log_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/log_manager
 
   #notification_email: an smtp email service
@@ -228,7 +267,10 @@ services:
       # - SMTP_AUTH="{ login config }"
     hostname: notification_email
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/notification_email
 
   #process_manager: (AppBuilder) a micro service to manage our process tasks
@@ -246,7 +288,10 @@ services:
       # - MYSQL_POOL_ACQUIRE_TIMEOUT
     hostname: process_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/process_manager
 
   #relay: (Appbuilder} A service to handle the communications with our relay server.
@@ -263,7 +308,10 @@ services:
       - PWA_URL
     hostname: relay
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/relay
 
   #tenant_manager: (AppBuilder) A service to manage the site's tenants
@@ -276,7 +324,10 @@ services:
       # - TENANT_MANAGER_TENANT_ID
     hostname: tenant_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/tenant_manager
 
   #user_manager: (AppBuilder) A microservice for managing Users
@@ -289,6 +340,9 @@ services:
       - USER_MANAGER_MAX_FAILED_LOGINS
     hostname: user_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
     # command: [ "node", "--inspect=0.0.0.0:9229", "app.js" ]
   #/user_manager
