@@ -35,20 +35,23 @@ Ensure you have the following installed:
 ### Running the Demo
 1. Clone the repository:
    ```sh
-   git clone https://github.com/achoobert/ab_demo.git
-   cd appbuilder-demo
+   git clone https://github.com/CruGlobal-AI/ab_demo.git
+   cd ab_demo
    ```
 2. Start AppBuilder using Docker Compose:
    ```sh
-   mv .env.example .env
+   cp .env.example .env
    docker compose up -d
    cd ./defs && ./upload.sh
    ```
-3. Access AppBuilder in your browser at `http://localhost:8080` (or the configured port).
+3. Access AppBuilder in your browser at `http://localhost:8088` (or the `WEB_PORT` you set).
+
+Service images come from the CruGlobal-AI fork of the stack (`ghcr.io/cruglobal-ai/*`). To use the upstream images instead, set `AB_IMAGE_REGISTRY=docker.io/digiserve` in `.env`.
 
 ### Running Cypress Tests
-1. Install dependencies:
+1. Install dependencies (needs `.env`, see above):
    ```sh
+   cp .env.example .env
    npm install
    npm run start_ab
    npm run setup_definitions
