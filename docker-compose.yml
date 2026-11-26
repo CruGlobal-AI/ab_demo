@@ -1,5 +1,3 @@
-version: "3.9"
-
 volumes:
   files:
   mysql_data:
@@ -15,7 +13,7 @@ networks:
 services:
   #db: use Maria DB as our backend DB
   db:
-    image: docker.io/digiserve/ab-db:$AB_DB_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-db:$AB_DB_VERSION
     environment:
       MYSQL_ROOT_PASSWORD: $MYSQL_PASSWORD
     ports:
@@ -25,11 +23,32 @@ services:
       # - mysql_config:/etc/mysql/conf.d
       - mysql_data:/var/lib/mysql
       # - mysql_key:/key
+    # healthy once init scripts are done and the server takes TCP connections
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
   #/db
+
+  #migration: one-off job that applies DB schema patches, then exits.
+  # The other services wait for it to finish. The image is amd64 only for now.
+  migration:
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-migration-manager:${AB_MIGRATION_MANAGER_VERSION:-master}
+    platform: linux/amd64
+    command: ["node", "app.js"]
+    environment:
+      - MYSQL_PASSWORD
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+  #/migration
 
   #nginx setup
   web:
-    image: docker.io/digiserve/ab-web:$AB_WEB_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-web:$AB_WEB_VERSION
     hostname: web
     volumes:
       - files:/data
@@ -54,7 +73,7 @@ services:
 
   #api_sails: our API end point
   api_sails:
-    image: docker.io/digiserve/ab-api-sails:$AB_API_SAILS_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-api-sails:$AB_API_SAILS_VERSION
     # workaround for SELinux bind mount issue (for podman only)
     # security_opt:
     #   label: disable
@@ -90,13 +109,16 @@ services:
         target: /var/log/appbuilder/
       - files:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
     # command: [ "node", "--inspect=0.0.0.0:9229", "app.js" ]
   #/api_sails
 
   #appbuilder: (AppBuilder) A multi-tenant aware service to process our AppBuilder requests.
   appbuilder:
-    image: docker.io/digiserve/ab-appbuilder:$AB_APPBUILDER_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-appbuilder:$AB_APPBUILDER_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -113,13 +135,16 @@ services:
       - CIRCUITBREAKER_RESET
     hostname: appbuilder
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
     # command: [ "node", "--inspect=0.0.0.0:9229", "app.js" ]
   #/appbuilder
 
   # custom_reports: A microservice for managing custom reports
   custom_reports:
-    image: docker.io/digiserve/ab-custom-reports:$AB_CUSTOM_REPORTS_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-custom-reports:$AB_CUSTOM_REPORTS_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -133,12 +158,15 @@ services:
       - CUSTOM_REPORTS_ENABLED
     hostname: custom_reports
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/custom_reports
 
   #definition_manager: (AppBuilder) A service to manage the definitions for a running AppBuilder platform.
   definition_manager:
-    image: docker.io/digiserve/ab-definition-manager:$AB_DEFINITION_MANAGER_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-definition-manager:$AB_DEFINITION_MANAGER_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -152,12 +180,15 @@ services:
       - DEFINITION_MANAGER_ENABLE
     hostname: definition_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/definition_manager
 
   #file_processor: A service to manage uploaded files.
   file_processor:
-    image: docker.io/digiserve/ab-file-processor:$AB_FILE_PROCESSOR_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-file-processor:$AB_FILE_PROCESSOR_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -178,12 +209,15 @@ services:
       - files:/data
       # - clamav:/var/lib/clamav
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/file_processor
 
   #log_manager: (AppBuilder) A log manager for various AB operations
   log_manager:
-    image: docker.io/digiserve/ab-log-manager:$AB_LOG_MANAGER_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-log-manager:$AB_LOG_MANAGER_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -201,12 +235,15 @@ services:
       # - SENTRY_CONFIG
     hostname: log_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/log_manager
 
   #notification_email: an smtp email service
   notification_email:
-    image: docker.io/digiserve/ab-notification-email:$AB_NOTIFICATION_EMAIL_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-notification-email:$AB_NOTIFICATION_EMAIL_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -230,12 +267,15 @@ services:
       # - SMTP_AUTH="{ login config }"
     hostname: notification_email
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/notification_email
 
   #process_manager: (AppBuilder) a micro service to manage our process tasks
   process_manager:
-    image: docker.io/digiserve/ab-process-manager:$AB_PROCESS_MANAGER_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-process-manager:$AB_PROCESS_MANAGER_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -248,12 +288,15 @@ services:
       # - MYSQL_POOL_ACQUIRE_TIMEOUT
     hostname: process_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/process_manager
 
   #relay: (Appbuilder} A service to handle the communications with our relay server.
   relay:
-    image: docker.io/digiserve/ab-relay:$AB_RELAY_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-relay:$AB_RELAY_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -265,12 +308,15 @@ services:
       - PWA_URL
     hostname: relay
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/relay
 
   #tenant_manager: (AppBuilder) A service to manage the site's tenants
   tenant_manager:
-    image: docker.io/digiserve/ab-tenant-manager:$AB_TENANT_MANAGER_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-tenant-manager:$AB_TENANT_MANAGER_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -278,12 +324,15 @@ services:
       # - TENANT_MANAGER_TENANT_ID
     hostname: tenant_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
   #/tenant_manager
 
   #user_manager: (AppBuilder) A microservice for managing Users
   user_manager:
-    image: docker.io/digiserve/ab-user-manager:$AB_USER_MANAGER_VERSION
+    image: ${AB_IMAGE_REGISTRY:-ghcr.io/cruglobal-ai}/ab-user-manager:$AB_USER_MANAGER_VERSION
     environment:
       - COTE_DISCOVERY_REDIS_HOST=redis
       - MYSQL_PASSWORD
@@ -291,6 +340,9 @@ services:
       - USER_MANAGER_MAX_FAILED_LOGINS
     hostname: user_manager
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      migration:
+        condition: service_completed_successfully
     # command: [ "node", "--inspect=0.0.0.0:9229", "app.js" ]
   #/user_manager
