@@ -1,6 +1,7 @@
 // eslint-disable-next-line prettier/prettier
 const testCases = [
    require("./test_cases/001_portal_auth_login.js"),
+   require("./test_cases/002_pwa.js"),
 ];
 
 // Don't stop tests on uncaught errors

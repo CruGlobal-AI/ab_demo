@@ -9,6 +9,6 @@ Notes for AI coding agents working in `ab_demo`.
 - Boot and test:
   1. `cp .env.example .env && docker compose up -d`
   2. `npm ci`
-  3. `npm run setup_definitions` (imports the Movies app from `defs/`)
+  3. `npm run setup_definitions` (imports every `defs/*.json`: the Movies web app and the `kitchen_pwa` mobile/PWA demo)
   4. `npm run test:ci` (Cypress, specs in `test/cypress/e2e/`)
 - CI (`.github/workflows/run.yml`) runs the same steps. It needs no secrets and deploys nothing.
